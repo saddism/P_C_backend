@@ -73,8 +73,8 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     // Create user
     const result = await pool.query(
-      'INSERT INTO users (email, password, username) VALUES ($1, $2, $3) RETURNING id',
-      [email, hashedPassword, username]
+      'INSERT INTO users (email, password, username, is_verified) VALUES ($1, $2, $3, $4) RETURNING id',
+      [email, hashedPassword, username, process.env.NODE_ENV === 'development']
     );
 
     const userId = result.rows[0].id;
@@ -89,12 +89,33 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       [userId, code, expiresAt]
     );
 
-    // Send verification email
-    await sendVerificationEmail(email, code);
+    // In development, skip email verification
+    if (process.env.NODE_ENV === 'development') {
+      res.status(201).json({
+        message: 'Registration successful. Development mode: email verification skipped.',
+        verificationCode: code // Only in development mode
+      });
+      return;
+    }
 
-    res.status(201).json({
-      message: 'Registration successful. Please check your email for verification code.'
-    });
+    try {
+      // Send verification email
+      await sendVerificationEmail(email, code);
+      res.status(201).json({
+        message: 'Registration successful. Please check your email for verification code.'
+      });
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+      // In development, continue despite email failure
+      if (process.env.NODE_ENV === 'development') {
+        res.status(201).json({
+          message: 'Registration successful but email sending failed. Development mode: proceeding anyway.',
+          verificationCode: code // Only in development mode
+        });
+      } else {
+        throw emailError; // Re-throw in production
+      }
+    }
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Internal server error' });
