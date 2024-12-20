@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Node.js
+node_modules/
+dist/
+
+# Data
+data/
+uploads/
+frames/
+*.mp4
+*.MP4
+*.jpg
+*.jpeg
+*.png
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
