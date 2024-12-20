@@ -2,7 +2,7 @@ app = "pc-backend"
 primary_region = "sin"
 
 [build]
-  builder = "paketobuildpacks/builder:base"
+  builder = "python"
 
 [env]
   PORT = "8000"
@@ -14,7 +14,7 @@ primary_region = "sin"
   auto_stop_machines = true
   auto_start_machines = true
   min_machines_running = 0
-  command = "uvicorn main:app --host 0.0.0.0 --port 8000"
+  command = "python main.py"
 
 [[vm]]
   cpu_kind = "shared"
