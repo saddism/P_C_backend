@@ -1,4 +1,11 @@
 {
+  "name": "pc-backend",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "dev": "ts-node src/app.ts"
+  },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "@types/express": "^5.0.0",
@@ -16,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
   }
 }
