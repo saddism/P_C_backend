@@ -22,3 +22,13 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Data directories
+data/
+uploads/
+frames/
+*.mp4
+*.MP4
+*.jpg
+*.jpeg
+*.png
