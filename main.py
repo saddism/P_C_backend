@@ -1,13 +1,27 @@
 import os
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import uvicorn
 from video_analysis import analyze_video, generate_prd, generate_business_plan
 
+class VideoResponse(BaseModel):
+    message: str
+    prd: str
+    business_plan: str
+
+class DocumentResponse(BaseModel):
+    prd: str | None = None
+    business_plan: str | None = None
+
 app = FastAPI(
     title="Video Analysis API",
-    description="API for analyzing app screen recordings and generating PRD/Business Plan",
-    version="1.0.0"
+    description="API for analyzing app screen recordings and generating PRD/Business Plan documents",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
 )
 
 app.add_middleware(
@@ -18,8 +32,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/api/videos/upload")
-async def upload_video(file: UploadFile = File(...)):
+@app.post("/api/videos/upload",
+    response_model=VideoResponse,
+    summary="Upload and analyze video",
+    description="""
+    Upload an app screen recording video for analysis.
+    The video will be processed to:
+    - Extract key frames
+    - Analyze app functionality and user flow
+    - Generate PRD document
+    - Generate Business Plan
+    Maximum file size: 500MB
+    """,
+    response_description="Returns generated PRD and Business Plan documents"
+)
+async def upload_video(file: UploadFile = File(..., description="App screen recording video file (MP4 format)")):
     try:
         # Save uploaded file
         file_path = f"data/uploads/{file.filename}"
@@ -44,7 +71,12 @@ async def upload_video(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/videos/{video_id}/prd")
+@app.get("/api/videos/{video_id}/prd",
+    response_model=DocumentResponse,
+    summary="Get PRD document",
+    description="Retrieve the generated PRD document for a specific video",
+    response_description="Returns the PRD document in markdown format"
+)
 async def get_prd(video_id: str):
     try:
         with open(f"data/prd_{video_id}.md", "r") as f:
@@ -53,7 +85,12 @@ async def get_prd(video_id: str):
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="PRD not found")
 
-@app.get("/api/videos/{video_id}/business-plan")
+@app.get("/api/videos/{video_id}/business-plan",
+    response_model=DocumentResponse,
+    summary="Get Business Plan document",
+    description="Retrieve the generated Business Plan document for a specific video",
+    response_description="Returns the Business Plan document in markdown format"
+)
 async def get_business_plan(video_id: str):
     try:
         with open(f"data/business_plan_{video_id}.md", "r") as f:
