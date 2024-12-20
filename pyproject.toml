@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "pc-backend"
+version = "0.1.0"
+description = "Video Analysis Backend Service"
+authors = ["Devin <devin@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "0.115.6"
+uvicorn = "0.34.0"
+google-generativeai = "0.3.2"
+python-multipart = "0.0.9"
+ffmpeg-python = "0.2.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
