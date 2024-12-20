@@ -32,6 +32,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
 @app.post("/api/videos/upload",
     response_model=VideoResponse,
     summary="Upload and analyze video",
@@ -100,4 +104,5 @@ async def get_business_plan(video_id: str):
         raise HTTPException(status_code=404, detail="Business plan not found")
 
 if __name__ == "__main__":
+    os.makedirs("data/uploads", exist_ok=True)
     uvicorn.run(app, host="0.0.0.0", port=8000)
