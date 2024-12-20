@@ -1,39 +1,44 @@
 import { Request, Response } from 'express';
-import Video from '../models/video.model';
-import Analysis from '../models/analysis.model';
+import { Video } from '../models/video.model';
+import { Analysis } from '../models/analysis.model';
+import { v4 as uuidv4 } from 'uuid';
 
 export const videoController = {
   // Upload new video
-  upload: async (req: Request, res: Response) => {
+  upload: async (req: Request, res: Response): Promise<void> => {
     try {
       const { userId } = req.user as { userId: string };
       const file = req.file;
 
       if (!file) {
-        return res.status(400).json({ message: 'No video file provided' });
+        res.status(400).json({ message: 'No video file provided' });
+        return;
       }
 
       const video = await Video.create({
+        id: uuidv4(),
         userId,
         filename: file.filename,
-        status: 'processing'
+        status: 'processing',
+        prdDocument: '',
+        businessPlan: ''
       });
 
       // Start analysis process asynchronously
       // TODO: Implement video analysis service integration
 
-      return res.status(201).json({
+      res.status(201).json({
         message: 'Video uploaded successfully',
         videoId: video.id
       });
     } catch (error) {
       console.error('Error uploading video:', error);
-      return res.status(500).json({ message: 'Error uploading video' });
+      res.status(500).json({ message: 'Error uploading video' });
     }
   },
 
   // List all videos for user
-  list: async (req: Request, res: Response) => {
+  list: async (req: Request, res: Response): Promise<void> => {
     try {
       const { userId } = req.user as { userId: string };
 
@@ -42,15 +47,15 @@ export const videoController = {
         order: [['createdAt', 'DESC']]
       });
 
-      return res.json({ videos });
+      res.json({ videos });
     } catch (error) {
       console.error('Error listing videos:', error);
-      return res.status(500).json({ message: 'Error fetching videos' });
+      res.status(500).json({ message: 'Error fetching videos' });
     }
   },
 
   // Get single video
-  get: async (req: Request, res: Response) => {
+  get: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
       const { userId } = req.user as { userId: string };
@@ -61,18 +66,19 @@ export const videoController = {
       });
 
       if (!video) {
-        return res.status(404).json({ message: 'Video not found' });
+        res.status(404).json({ message: 'Video not found' });
+        return;
       }
 
-      return res.json({ video });
+      res.json({ video });
     } catch (error) {
       console.error('Error fetching video:', error);
-      return res.status(500).json({ message: 'Error fetching video details' });
+      res.status(500).json({ message: 'Error fetching video details' });
     }
   },
 
   // Get PRD document
-  getPRD: async (req: Request, res: Response) => {
+  getPRD: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
       const { userId } = req.user as { userId: string };
@@ -83,18 +89,19 @@ export const videoController = {
       });
 
       if (!video) {
-        return res.status(404).json({ message: 'PRD not found' });
+        res.status(404).json({ message: 'PRD not found' });
+        return;
       }
 
-      return res.json({ prd: video.prdDocument });
+      res.json({ prd: video.prdDocument });
     } catch (error) {
       console.error('Error fetching PRD:', error);
-      return res.status(500).json({ message: 'Error fetching PRD' });
+      res.status(500).json({ message: 'Error fetching PRD' });
     }
   },
 
   // Get business plan
-  getBusinessPlan: async (req: Request, res: Response) => {
+  getBusinessPlan: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
       const { userId } = req.user as { userId: string };
@@ -105,13 +112,14 @@ export const videoController = {
       });
 
       if (!video) {
-        return res.status(404).json({ message: 'Business plan not found' });
+        res.status(404).json({ message: 'Business plan not found' });
+        return;
       }
 
-      return res.json({ businessPlan: video.businessPlan });
+      res.json({ businessPlan: video.businessPlan });
     } catch (error) {
       console.error('Error fetching business plan:', error);
-      return res.status(500).json({ message: 'Error fetching business plan' });
+      res.status(500).json({ message: 'Error fetching business plan' });
     }
   }
 };

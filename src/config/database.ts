@@ -1,14 +1,19 @@
-import { Sequelize } from 'sequelize';
+import { Sequelize } from 'sequelize-typescript';
+import { Video } from '../models/video.model';
+import { Analysis } from '../models/analysis.model';
 
-// Use environment variables in production
 const dbName = process.env.DB_NAME || 'pc_backend';
 const dbUser = process.env.DB_USER || 'postgres';
 const dbPassword = process.env.DB_PASSWORD || 'postgres';
 const dbHost = process.env.DB_HOST || 'localhost';
 
-export const sequelize = new Sequelize(dbName, dbUser, dbPassword, {
+export const sequelize = new Sequelize({
+  database: dbName,
+  username: dbUser,
+  password: dbPassword,
   host: dbHost,
   dialect: 'postgres',
+  models: [Video, Analysis],
   logging: false,
   pool: {
     max: 5,
@@ -18,7 +23,6 @@ export const sequelize = new Sequelize(dbName, dbUser, dbPassword, {
   }
 });
 
-// Test database connection
 sequelize
   .authenticate()
   .then(() => {
