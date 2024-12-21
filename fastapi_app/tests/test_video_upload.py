@@ -1,10 +1,15 @@
 import pytest
 from fastapi.testclient import TestClient
-from ..app.main import app
-from ..app.database import get_db
-from sqlalchemy.orm import Session
-from ..app.models import User, Video, Analysis
+import sys
 import os
+
+# Add application root to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.main import app
+from app.database import get_db
+from sqlalchemy.orm import Session
+from app.models import User, Video, Analysis
 from .generate_test_video import create_test_video
 
 client = TestClient(app)

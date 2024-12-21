@@ -1,12 +1,17 @@
 import pytest
 from fastapi.testclient import TestClient
-from ..app.main import app
-from ..app.services.video import extract_frames, perform_ocr
-from ..app.services.gemini import GeminiService
-from ..app.database import get_db
-from ..app.models import User, Video, Analysis
-from sqlalchemy.orm import Session
+import sys
 import os
+
+# Add application root to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.main import app
+from app.services.video import extract_frames, perform_ocr
+from app.services.gemini import GeminiService
+from app.database import get_db
+from app.models import User, Video, Analysis
+from sqlalchemy.orm import Session
 from .generate_test_video import create_test_video
 
 client = TestClient(app)
