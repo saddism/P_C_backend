@@ -14,6 +14,21 @@ router = APIRouter()
 )
 async def get_videos():
     try:
+        # If data directory doesn't exist, return empty list
+        if not os.path.exists("data"):
+            return {
+                "data": VideoListResponse(
+                    products=[]
+                )
+            }
+
+        # If data directory exists but is not readable, that's an error
+        if not os.access("data", os.R_OK):
+            raise HTTPException(
+                status_code=500,
+                detail="获取视频列表失败: 无法访问数据目录"
+            )
+
         # List all files in data directory
         video_files = glob.glob("data/prd_*.md")
         products = []
@@ -46,6 +61,8 @@ async def get_videos():
                 products=products
             )
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
