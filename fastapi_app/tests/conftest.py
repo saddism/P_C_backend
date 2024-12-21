@@ -5,6 +5,13 @@ from sqlalchemy.orm import sessionmaker
 import sys
 import os
 import tempfile
+from pathlib import Path
+from dotenv import load_dotenv
+from unittest.mock import patch
+
+# Load test environment variables
+test_env_path = Path(__file__).parent / '.env.test'
+load_dotenv(test_env_path)
 
 # Add application root to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -12,6 +19,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.main import app
 from app.database import Base, get_db
 from app.models import User
+from .mocks.gemini_service import MockGeminiService
 
 # Create test database
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"
@@ -22,7 +30,7 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 def test_db():
     """Create test database."""
     Base.metadata.create_all(bind=engine)
-    yield engine
+    yield
     Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture
@@ -59,6 +67,12 @@ def test_user(db_session):
     db_session.commit()
     db_session.refresh(user)
     return user
+
+@pytest.fixture(autouse=True)
+def mock_gemini_service():
+    """Automatically mock GeminiService for all tests."""
+    with patch('app.services.gemini.GeminiService', MockGeminiService):
+        yield
 
 @pytest.fixture
 def test_files_dir():
