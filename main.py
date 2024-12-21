@@ -7,9 +7,15 @@ from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.declarative import declarative_base
+from models.user import User
 import uvicorn
 from video_analysis import analyze_video, generate_prd, generate_business_plan
 from typing import Dict, Optional
+import google.generativeai as genai
+
+# Configure Gemini API
+GEMINI_API_KEY = "AIzaSyDBhwyLlC3jO1ek2g0UyK3lp11CO8v1alg"
+genai.configure(api_key=GEMINI_API_KEY)
 
 # Error message templates
 ERROR_MESSAGES: Dict[int, str] = {
@@ -39,11 +45,11 @@ class DocumentResponse(BaseModel):
 
 # Email configuration
 mail_config = ConnectionConfig(
-    MAIL_USERNAME=os.getenv("SMTP_USER"),
-    MAIL_PASSWORD=os.getenv("SMTP_PASSWORD"),
-    MAIL_FROM=os.getenv("SMTP_USER"),
-    MAIL_PORT=int(os.getenv("SMTP_PORT", "465")),
-    MAIL_SERVER=os.getenv("SMTP_HOST"),
+    MAIL_USERNAME="welcome@guixian.cn",
+    MAIL_PASSWORD="GuiXian7758",
+    MAIL_FROM="welcome@guixian.cn",
+    MAIL_PORT=465,
+    MAIL_SERVER="smtpdm.aliyun.com",
     MAIL_STARTTLS=False,
     MAIL_SSL_TLS=True,
     USE_CREDENTIALS=True
@@ -70,7 +76,7 @@ app.add_middleware(
 )
 
 # Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = "postgresql://postgres.emfvgkmuwfguexaowavs:CG0Pz6GCM82syMgc@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -290,6 +296,30 @@ async def get_business_plan(video_id: str):
         return {"business_plan": business_plan}
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Business plan not found")
+
+@app.get("/api/auth/verify-status/{email}",
+    response_model=Dict[str, bool],
+    summary="Check email verification status",
+    description="Check if a given email address has been verified",
+    response_description="Returns verification status"
+)
+async def check_email_verification(
+    email: EmailStr,
+    db: Session = Depends(get_db)
+):
+    try:
+        # Query the database for user verification status
+        user = db.query(User).filter(User.email == email).first()
+
+        if user is None:
+            return {"verified": False}
+
+        return {"verified": bool(user.verified)}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=ERROR_MESSAGES[500]
+        )
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
