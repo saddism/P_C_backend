@@ -2,13 +2,17 @@ import os
 import google.generativeai as genai
 import logging
 import ffmpeg
+import cv2
+import pytesseract
+import numpy as np
+from typing import List, Dict, Any
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configure Google Gemini API
-genai.configure(api_key='AIzaSyDBhwyLlC3jO1ek2g0UyK3lp11CO8v1alg')
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel('gemini-pro-vision',
                             safety_settings={
                                 "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
@@ -17,45 +21,130 @@ model = genai.GenerativeModel('gemini-pro-vision',
                                 "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE"
                             })
 
-def analyze_video(video_path):
+def extract_text_from_frame(frame_path: str) -> str:
+    """Extract text from frame using OCR"""
+    try:
+        img = cv2.imread(frame_path)
+        if img is None:
+            logger.error(f"Failed to read image: {frame_path}")
+            return ""
+
+        # Preprocess image for better OCR
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+
+        # Extract text using Tesseract with Chinese and English support
+        text = pytesseract.image_to_string(thresh, lang='chi_sim+eng')
+        return text.strip()
+    except Exception as e:
+        logger.error(f"Error in OCR processing: {str(e)}")
+        return ""
+
+def analyze_video(video_path: str) -> List[Dict[str, Any]]:
     """Extract frames from video and analyze app functionality"""
     os.makedirs('data/frames', exist_ok=True)
+    os.makedirs('data/output', exist_ok=True)
 
     try:
-        # Extract frames every 2 seconds
-        stream = ffmpeg.input(video_path)
-        stream = ffmpeg.filter(stream, 'fps', fps=0.5)
-        stream = ffmpeg.output(stream, 'data/frames/frame_%d.jpg')
-        ffmpeg.run(stream)
+        # Extract frames with adaptive sampling
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            logger.error(f"Failed to open video file: {video_path}")
+            return []
 
-        # Get list of frame paths
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = total_frames / fps
+
+        # Optimize sampling rate based on video duration
+        if duration <= 30:  # Short videos (≤30s)
+            interval = max(int(fps), total_frames // 30)  # At least 1 frame per second
+        elif duration <= 120:  # Medium videos (30s-2min)
+            interval = max(int(fps * 2), total_frames // 50)  # 1 frame per 2 seconds
+        else:  # Long videos (>2min)
+            interval = max(int(fps * 3), total_frames // 60)  # 1 frame per 3 seconds
+
         frames = []
-        for frame in sorted(os.listdir('data/frames')):
-            if frame.endswith('.jpg'):
-                frames.append(os.path.join('data/frames', frame))
+        frame_count = 0
+        frame_data = []
+        last_scene_change = 0
+        prev_frame = None
 
-        return frames
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            # Check for scene changes if we have a previous frame
+            if prev_frame is not None and frame_count - last_scene_change >= interval:
+                diff = cv2.absdiff(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY),
+                                 cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY))
+                non_zero = cv2.countNonZero(diff)
+                if non_zero > frame.shape[0] * frame.shape[1] * 0.1:  # 10% change threshold
+                    last_scene_change = frame_count
+                    frame_path = f'data/frames/frame_{frame_count}.jpg'
+                    cv2.imwrite(frame_path, frame)
+                    text = extract_text_from_frame(frame_path)
+                    frame_data.append({
+                        'path': frame_path,
+                        'timestamp': frame_count / fps,
+                        'ocr_text': text,
+                        'scene_change': True
+                    })
+                    frames.append(frame_path)
+
+            # Regular interval sampling
+            elif frame_count % interval == 0:
+                frame_path = f'data/frames/frame_{frame_count}.jpg'
+                cv2.imwrite(frame_path, frame)
+                text = extract_text_from_frame(frame_path)
+                frame_data.append({
+                    'path': frame_path,
+                    'timestamp': frame_count / fps,
+                    'ocr_text': text,
+                    'scene_change': False
+                })
+                frames.append(frame_path)
+
+            prev_frame = frame.copy()
+            frame_count += 1
+
+        cap.release()
+        logger.info(f"Extracted {len(frames)} frames from video")
+        return frame_data
     except Exception as e:
         logger.error(f"Error extracting frames: {e}")
         return []
 
-def generate_prd(frames):
-    """Generate PRD document from video frames in Chinese"""
+def generate_prd(frame_data: List[Dict[str, Any]]) -> str:
+    """Generate PRD document from video frames and OCR data in Chinese"""
     try:
         logger.info("Generating PRD document...")
         frame_parts = []
-        for frame in frames:
+        ocr_analysis = []
+
+        for frame in frame_data:
             try:
-                with open(frame, 'rb') as f:
+                with open(frame['path'], 'rb') as f:
                     frame_parts.append({
                         'mime_type': 'image/jpeg',
                         'data': f.read()
                     })
+                if frame['ocr_text']:
+                    ocr_analysis.append(f"界面时间点 {frame['timestamp']:.2f}s:\n{frame['ocr_text']}\n")
             except Exception as e:
-                logger.error(f"Error reading frame {frame}: {str(e)}")
+                logger.error(f"Error reading frame {frame['path']}: {str(e)}")
                 continue
 
-        prompt = """基于以下应用程序的界面截图，生成一份详细的产品需求文档（PRD），包括以下内容：
+        # Combine OCR analysis with prompt
+        ocr_context = "\n分析提取的界面文本：\n" + "\n".join(ocr_analysis) if ocr_analysis else ""
+
+        prompt = f"""基于以下应用程序的界面截图和文本分析，生成一份详细的产品需求文档（PRD）。
+
+提取的界面文本分析：
+{ocr_context}
+
+请包含以下内容：
 
 1. 应用定位与目标用户群分析
    - 产品定位和价值主张
@@ -91,12 +180,13 @@ def generate_prd(frames):
    - 安全测试要求
    - 兼容性测试范围
 
-请基于提供的界面截图，详细分析每个页面的功能和交互设计，确保文档结构清晰，内容完整。重点关注用户体验和技术实现的可行性。"""
+请基于提供的界面截图和文本分析，详细分析每个页面的功能和交互设计，确保文档结构清晰，内容完整。重点关注用户体验和技术实现的可行性。"""
 
         response = model.generate_content([prompt] + frame_parts)
         prd_content = response.text
 
         # Save the PRD document
+        os.makedirs('data/output', exist_ok=True)
         prd_path = 'data/output/prd.md'
         with open(prd_path, 'w', encoding='utf-8') as f:
             f.write(prd_content)
@@ -107,23 +197,35 @@ def generate_prd(frames):
         logger.error(f"Error in generate_prd: {str(e)}")
         raise
 
-def generate_business_plan(frames):
-    """Generate business plan from video frames in Chinese"""
+def generate_business_plan(frame_data: List[Dict[str, Any]]) -> str:
+    """Generate business plan from video frames and OCR data in Chinese"""
     try:
         logger.info("Generating business plan...")
         frame_parts = []
-        for frame in frames:
+        ocr_analysis = []
+
+        for frame in frame_data:
             try:
-                with open(frame, 'rb') as f:
+                with open(frame['path'], 'rb') as f:
                     frame_parts.append({
                         'mime_type': 'image/jpeg',
                         'data': f.read()
                     })
+                if frame['ocr_text']:
+                    ocr_analysis.append(f"界面时间点 {frame['timestamp']:.2f}s:\n{frame['ocr_text']}\n")
             except Exception as e:
-                logger.error(f"Error reading frame {frame}: {str(e)}")
+                logger.error(f"Error reading frame {frame['path']}: {str(e)}")
                 continue
 
-        prompt = """基于以下应用程序的界面截图，生成一份完整的商业计划书，包括以下内容：
+        # Combine OCR analysis with prompt
+        ocr_context = "\n分析提取的界面文本：\n" + "\n".join(ocr_analysis) if ocr_analysis else ""
+
+        prompt = f"""基于以下应用程序的界面截图和文本分析，生成一份完整的商业计划书。
+
+提取的界面文本分析：
+{ocr_context}
+
+请包含以下内容：
 
 1. 市场定位分析
    - 目标市场需求和痛点
@@ -161,12 +263,13 @@ def generate_business_plan(frames):
    - 用户获取方案
    - 品牌建设策略
 
-请基于提供的界面截图，深入分析产品的商业价值和市场潜力，重点关注盈利模式和竞争策略。"""
+请基于提供的界面截图和文本分析，深入分析产品的商业价值和市场潜力，重点关注盈利模式和竞争策略。"""
 
         response = model.generate_content([prompt] + frame_parts)
         business_plan_content = response.text
 
         # Save the business plan document
+        os.makedirs('data/output', exist_ok=True)
         business_plan_path = 'data/output/business_plan.md'
         with open(business_plan_path, 'w', encoding='utf-8') as f:
             f.write(business_plan_content)
